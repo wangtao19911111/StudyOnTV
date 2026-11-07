@@ -134,19 +134,19 @@ em { font-style: normal; }
 .option {
   width: 47.5%; margin: 0 5% 2.2rem 0;
   display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
-  /* fork 定制：放大选项内边距与文字（原 2.9rem 3.2rem / 3.2rem） */
+  /* fork 定制：放大选项内边距与文字（原 2.9rem 3.2rem / 3.2rem），4.5rem≈45px@1080p */
   padding: 3rem 3.4rem; border-radius: 1.8rem;
   background: #141416;
   border: 2px solid #1F1F23;
-  font-size: 3.6rem; font-weight: 700; color: #E9E9EC;
+  font-size: 4.5rem; font-weight: 800; color: #E9E9EC;
   -webkit-transition: -webkit-transform .16s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease;
   transition: transform .16s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease;
 }
 .option:nth-child(2n) { margin-right: 0; }
 .option .letter {
   /* fork 定制：放大 A/B/C/D 字母标（原 5rem 方框 / 2rem 字号） */
-  width: 6.4rem; height: 6.4rem; margin-right: 2.8rem; line-height: 6.4rem; text-align: center;
-  font-size: 2.7rem; font-weight: 800; color: #8E8E96;
+  width: 7.2rem; height: 7.2rem; margin-right: 2.8rem; line-height: 7.2rem; text-align: center;
+  font-size: 3.2rem; font-weight: 800; color: #8E8E96;
   background: rgba(255,255,255,.06); border-radius: 1.4rem;
 }
 .option.focused {
