@@ -25,11 +25,13 @@ class RemoteKeys(private val openParent: () -> Unit) {
             KeyEvent.KEYCODE_DPAD_DOWN -> "move('down')"
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> "select()"
             KeyEvent.KEYCODE_BACK -> "back()"
+            // fork 定制：菜单键 / 麦克风语音键重读当前题目
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_VOICE_ASSIST -> "readAloud()"
             else -> return false
         }
         if (event.action != KeyEvent.ACTION_DOWN) return true
-        // 长按 OK / 返回不重复触发（多选题长按会来回勾选、提交按钮会重复提交）
-        if (event.repeatCount > 0 && (js == "select()" || js == "back()")) return true
+        // 长按 OK / 返回 / 菜单不重复触发（多选题长按会来回勾选、提交按钮会重复提交、朗读会不断重启）
+        if (event.repeatCount > 0 && (js == "select()" || js == "back()" || js == "readAloud()")) return true
         if (code != KeyEvent.KEYCODE_DPAD_UP && event.repeatCount == 0) upCount = 0
         if (web == null) {
             if (code == KeyEvent.KEYCODE_DPAD_UP) countUp(event)

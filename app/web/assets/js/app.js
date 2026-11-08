@@ -112,7 +112,7 @@
     $('qDots').textContent = round.mode === 'streak' ? '连续答对 ' + round.streak + ' 题' : '';
     var qLength = (item.q || '').length;
     $('qText').className = 'question' + (qLength > 120 ? ' longer' : qLength > 56 ? ' long' : '');
-    try { if (isTv() && window.localStorage.getItem('sotv_tts') === '1') { nativeCall('readAloud', [item.q]); } } catch (e) {}
+    if (ttsEnabled()) speakQuestion();
     var options = $('qOptions'); options.innerHTML = '';
     var longest = 0;
     (item.a || []).forEach(function (value) { longest = Math.max(longest, String(value).length); });
@@ -168,6 +168,7 @@
   }
   function submit() {
     if (state.busy || !state.round) return;
+    try { nativeCall('stopReading'); } catch (e) {}
     var round = state.round, item = round.question, written = $('writtenAnswer');
     if (written ? (!written.value.trim() && !state.draft.drawing) : !state.selected.length) { toast('请先填写或选择答案'); return; }
     state.busy = true;
@@ -222,6 +223,7 @@
   function proceed() {
     var result = state.feedback;
     if (!result) return;
+    try { nativeCall('stopReading'); } catch (e) {}
     window.clearTimeout(nextTimer);
     hideFeedback();
     state.busy = false;
@@ -320,6 +322,23 @@
     el.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + '</svg>';
   }
   function isTv() { return document.documentElement.classList.contains('tv-device'); }
+  // fork 定制：电视端题目朗读。默认开启，localStorage 里 sotv_tts='0' 可关；且系统必须装了 TTS 引擎
+  function ttsEnabled() {
+    if (!isTv()) return false;
+    try { if (window.localStorage.getItem('sotv_tts') === '0') return false; } catch (e) {}
+    try { return !!nativeCall('ttsAvailable'); } catch (e) { return false; }
+  }
+  function questionLang(item) {
+    var subject = item.subject || '';
+    if (subject === '英文' || subject === '英语' || subject.toLowerCase() === 'english') return 'en';
+    // 没标科目的兜底：题干去掉非字母汉字后全是拉丁字母就按英文读
+    var letters = (item.q || '').replace(/[^A-Za-z一-鿿]/g, '');
+    return letters && /^[A-Za-z]+$/.test(letters) ? 'en' : 'zh';
+  }
+  function speakQuestion() {
+    if (!state.round) return;
+    try { nativeCall('readAloud', [state.round.question.q, questionLang(state.round.question)]); } catch (e) {}
+  }
   function focusables() {
     var screen = document.querySelector('.screen.active');
     var list = screen ? Array.prototype.slice.call(screen.querySelectorAll('.focusable')) : [];
@@ -379,7 +398,7 @@
     if (action === 'update-close') { $('updateTip').className = 'update-tip'; try { if (window.currentUpdate) window.localStorage.setItem('sotv_update_dismissed', window.currentUpdate.latest); } catch (e) {} if (el.classList.contains('focused')) focusDefault(); }
     if (action === 'permissions' || action === 'password') nativeCall(action === 'permissions' ? 'openPermissions' : 'changePassword');
     if (action === 'clear-drawing') { state.draft.drawing = ''; renderQuestion(); }
-    if (action === 'read-aloud') { try { nativeCall('readAloud', [state.round ? state.round.question.q : '']); } catch(e) {} }
+    if (action === 'read-aloud') speakQuestion();
     if (action === 'retry') start();
     if (action === 'skip-review') { request('/api/quiz/skip', {}, function (error, result) { if (error) { toast(error); return; } state.awaiting = false; state.reviewed = false; state.busy = false; start(); }); }
     if (action === 'return-learning') nativeCall('backToQuiz');
@@ -429,6 +448,7 @@
     var info = nativeCall('deviceInfo');
     if (info && JSON.parse(info).platform === 'android-tv') document.documentElement.classList.add('tv-device');
     else if (info) { var analytics = document.createElement('script'); analytics.src = 'assets/js/analytics.js'; analytics.async = true; document.head.appendChild(analytics); }
+    if (!ttsEnabled()) { var ttsKbd = $('ttsHintKbd'), ttsTxt = $('ttsHintText'); if (ttsKbd) ttsKbd.style.display = 'none'; if (ttsTxt) ttsTxt.style.display = 'none'; }
     // 先用上次的主题，避免加载配置前闪一下默认配色
     try { applyTheme(window.localStorage.getItem('sotv_mode')); } catch (e) { applyTheme('dark'); }
     // 启动时显示已缓存的更新信息（原生层在页面加载前拿到结果时，回调会丢失）
@@ -476,7 +496,7 @@
   };
   window.SOTV_UPDATE = function (info) { if (!info || !info.latest) return; window.currentUpdate = info;
     try { if (!info.force && window.localStorage.getItem('sotv_update_dismissed') === info.latest) return; } catch (e) {} $('updateText').textContent = '发现新版本 v' + info.latest; $('updateTip').className = 'update-tip show'; };
-  window.TV = { move: move, select: function () { activate(); }, back: function () { if (!state.learning.reason && (state.learning.remainingSeconds > 0 || state.learning.free)) nativeCall('exitToLauncher'); else toast('现在暂不可用'); }, state: state };
+  window.TV = { move: move, select: function () { activate(); }, back: function () { if (!state.learning.reason && (state.learning.remainingSeconds > 0 || state.learning.free)) nativeCall('exitToLauncher'); else toast('现在暂不可用'); }, readAloud: function () { if (ttsEnabled()) speakQuestion(); }, state: state };
   window.SOTV_RESUME = function () { if (document.readyState === 'complete' && !state.busy && state.screen !== 'pair') route(); };
   window.addEventListener('hashchange', route);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

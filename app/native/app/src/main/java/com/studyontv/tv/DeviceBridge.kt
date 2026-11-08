@@ -99,31 +99,82 @@ open class DeviceBridge(protected val activity: Activity, private val connection
         }
     }
 
-    private var tts: TextToSpeech? = null
-
+    /**
+     * 朗读题目。lang："en" 用英语发音，其它走中文。
+     * 题干可能中英混排，语言选择以科目为准，引擎不支持该语言时再互相回退。
+     */
     @JavascriptInterface
-    fun readAloud(text: String) {
+    fun readAloud(text: String, lang: String) {
         if (text.isBlank()) return
-        activity.runOnUiThread {
-            if (tts == null) {
-                tts = TextToSpeech(activity) { status ->
-                    if (status == TextToSpeech.SUCCESS) {
-                        tts?.language = Locale.CHINESE
-                        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "sotv_read")
-                    }
-                }
-            } else {
-                tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "sotv_read")
-            }
-        }
+        val locale = if (lang.startsWith("en", ignoreCase = true)) Locale.US else Locale.CHINESE
+        activity.runOnUiThread { speak(text, locale) }
     }
 
     @JavascriptInterface
     fun stopReading() {
-        tts?.stop()
+        activity.runOnUiThread {
+            pendingText = null
+            tts?.stop()
+        }
+    }
+
+    /** 系统里是否装了 TTS 引擎，网页据此决定要不要显示朗读相关 UI */
+    @JavascriptInterface
+    fun ttsAvailable(): Boolean =
+        activity.packageManager.queryIntentServices(Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE), 0).isNotEmpty()
+
+    private fun speak(text: String, locale: Locale) {
+        val engine = tts
+        if (engine == null) {
+            // 初始化是异步的：先把要读的内容挂起，onInit 成功后立刻读
+            pendingText = text
+            pendingLocale = locale
+            ttsReady = false
+            tts = TextToSpeech(activity.applicationContext) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    ttsReady = true
+                    tts?.setSpeechRate(0.9f) // 给孩子读题，稍慢一点
+                    val queued = pendingText
+                    if (!queued.isNullOrBlank()) {
+                        tts?.let { applyLocale(it, pendingLocale ?: Locale.CHINESE) }
+                        tts?.speak(queued, TextToSpeech.QUEUE_FLUSH, null, "sotv_read")
+                    }
+                    pendingText = null
+                } else {
+                    // 初始化失败要释放实例，否则后续调用会永远挂在 pending 上
+                    tts?.shutdown()
+                    tts = null
+                    ttsReady = false
+                    pendingText = null
+                }
+            }
+            return
+        }
+        if (!ttsReady) {
+            pendingText = text
+            pendingLocale = locale
+            return
+        }
+        applyLocale(engine, locale)
+        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "sotv_read")
+    }
+
+    private fun applyLocale(engine: TextToSpeech, locale: Locale) {
+        val result = engine.setLanguage(locale)
+        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+            // 只装了英文引擎时中文题也尽量读，反之亦然
+            engine.setLanguage(if (locale.language == "en") Locale.CHINESE else Locale.US)
+        }
     }
 
     companion object {
         fun isTv(context: Context): Boolean = BuildConfig.FLAVOR == "tv"
+
+        // 进程级共享引擎：TV 端 WebView 在 onStop 会销毁重建，DeviceBridge 跟着重建，
+        // 引擎若实例化在 bridge 上会反复创建并泄漏 TextToSpeech。
+        private var tts: TextToSpeech? = null
+        private var ttsReady = false
+        private var pendingText: String? = null
+        private var pendingLocale: Locale? = null
     }
 }
